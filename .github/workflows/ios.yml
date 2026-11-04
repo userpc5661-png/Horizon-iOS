@@ -1,0 +1,113 @@
+name: iOS unsigned IPA
+run-name: iOS · ${{ github.sha }}
+
+# Builds Horizon for iPhone/iPad on a macOS runner and uploads an unsigned
+# (ad-hoc signed) IPA. Install it with Sideloadly/AltStore (they re-sign it
+# with your Apple ID) or TrollStore. See docs/ios.md.
+on:
+  push:
+    paths:
+      - 'crates/**'
+      - 'launcher/src/**'
+      - 'third_party/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'research-lock.json'
+      - 'packaging/ios/**'
+      - 'tools/android_prepare.py'
+      - 'tools/android_build.py'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Cargo profile (release is slower to build, faster to play)
+        type: choice
+        options: [release, dev]
+        default: release
+
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 240
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      # Test builds: parallel codegen without LTO builds far faster on the runner.
+      CARGO_PROFILE_RELEASE_LTO: 'false'
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.local/ios-target
+      HORIZON_TELEMETRY_URL: 'off'
+      HORIZON_ANDROID_PUBLIC: '1'
+      IPHONEOS_DEPLOYMENT_TARGET: '15.0'
+      HORIZON_IOS_PROFILE: ${{ inputs.profile || 'release' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Install Rust and the iOS target
+        run: |
+          rustup show
+          rustup target add aarch64-apple-ios
+          rustc --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .local/ios-target
+          key: ios-cargo-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            ios-cargo-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
+            ios-cargo-
+
+      # The engine tables come from Mojang's official downloads (checked against
+      # pinned hashes); they are not in Git. Cached per pinned game version.
+      - uses: actions/cache@v4
+        id: engine
+        with:
+          path: |
+            .local/horizon-client
+          key: ios-engine-${{ hashFiles('research-lock.json', 'crates/horizon-prepare/**') }}
+
+      - name: Prepare engine data from official downloads
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: python3 tools/android_prepare.py --java-home "$JAVA_HOME"
+
+      - name: Package engine data
+        run: |
+          python3 -c "import sys; sys.path.insert(0, 'tools'); import android_build; print(android_build.engine_data(True))"
+          ls -la .local/android/engine-data-generated.zip
+
+      - name: Build the IPA
+        run: |
+          bash packaging/ios/build_ipa.sh .local/android/engine-data-generated.zip \
+            "dist/Horizon-iOS-unsigned-${GITHUB_RUN_NUMBER}.ipa" 0.7.7 "${GITHUB_RUN_NUMBER}"
+          cp LICENSE dist/LICENSE.txt
+          shasum -a 256 dist/*.ipa > dist/SHA256SUMS.txt
+          {
+            echo "### Horizon iOS (unsigned)"
+            echo
+            echo "Commit \`${GITHUB_SHA}\`, profile \`${HORIZON_IOS_PROFILE}\`."
+            echo "Download the artifact below, then install the IPA with Sideloadly, AltStore or TrollStore."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Horizon-iOS-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

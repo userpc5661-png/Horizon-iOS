@@ -175,12 +175,45 @@ fn sandbox() -> Option<(std::path::PathBuf, std::path::PathBuf)> {
     Some((root.join("Documents"), root.join("Library/Caches/Horizon")))
 }
 
+/// stderr into Documents/performance/ios-stderr.log, written unbuffered, so a
+/// panic, a stack overflow or an abort leaves its message even when the
+/// diagnostics worker never gets to flush. The previous run's file is kept.
+fn capture_stderr(home: &std::path::Path) {
+    unsafe extern "C" {
+        fn dup2(from: i32, to: i32) -> i32;
+    }
+    use std::os::fd::AsRawFd;
+    let dir = home.join("performance");
+    let _ = std::fs::create_dir_all(&dir);
+    let current = dir.join("ios-stderr.log");
+    let _ = std::fs::rename(&current, dir.join("ios-stderr-previous.log"));
+    if let Ok(file) = std::fs::File::create(&current) {
+        // SAFETY: duplicates a descriptor this function owns onto stderr.
+        unsafe { dup2(file.as_raw_fd(), 2) };
+    }
+}
+
+/// Every panic's message, place and stack on stderr, before the crash report.
+fn log_panics() {
+    let next = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        eprintln!(
+            "[Horizon PANIC] thread {:?}: {info}\n{}",
+            std::thread::current().name(),
+            std::backtrace::Backtrace::force_capture()
+        );
+        next(info);
+    }));
+}
+
 fn main() {
-    init_logging();
     let Some((home, cache)) = sandbox() else {
         eprintln!("Horizon: iOS supplied no application sandbox");
         return;
     };
+    let _ = std::fs::create_dir_all(&home);
+    capture_stderr(&home);
+    init_logging();
     for dir in [&home, &cache] {
         if let Err(error) = std::fs::create_dir_all(dir) {
             eprintln!("Horizon: cannot create {}: {error}", dir.display());
@@ -205,6 +238,7 @@ fn main() {
         return;
     }
     horizon_client::crash::install(home.clone(), "client");
+    log_panics();
     exit_reports::install(&home);
     let _ = std::fs::remove_file(home.join("android-error.txt"));
     // The bundle is read-only; the launcher and installer expect the engine

@@ -238,6 +238,9 @@ pub fn enable_high_refresh() {
         let _: () = msg_send![link, addToRunLoop: main, forMode: &*mode];
         // The run loop retains the link, and the link its target, for the app's life.
         std::mem::forget(target);
-        log::info!("iOS: display link up to {maximum} Hz");
+        log::info!(
+            "iOS: display link up to {maximum} Hz (screen reports {fps}, range API {})",
+            responds.as_bool()
+        );
     }
 }

@@ -132,6 +132,9 @@ pub(crate) fn ios_window(
             return Ok(window.clone());
         }
         let window = std::sync::Arc::new(events.create_window(attributes)?);
+        // After launch, with the window on screen: UIKit ignores frame-rate
+        // requests made before UIApplicationMain has an active scene.
+        objc::enable_high_refresh();
         *slot = Some(window.clone());
         Ok(window)
     })

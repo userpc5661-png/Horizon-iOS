@@ -171,3 +171,73 @@ pub fn set_idle_timer_disabled(disabled: bool) {
         }
     }
 }
+
+/// ProMotion: UIKit keeps an app at 60 Hz unless something asks for more.
+/// A CADisplayLink whose preferred range reaches the display's maximum (120 Hz
+/// on iPhone Pro models, with CADisableMinimumFrameDurationOnPhone in
+/// Info.plist) lets the Metal layer present up to that rate. The game's own
+/// Max Framerate option still limits below it. The link's callback is
+/// NSObject's `isEqual:` on a plain object: it only has to exist.
+pub fn enable_high_refresh() {
+    use objc2::encode::{Encode, Encoding};
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct FrameRateRange {
+        minimum: f32,
+        maximum: f32,
+        preferred: f32,
+    }
+    unsafe impl Encode for FrameRateRange {
+        const ENCODING: Encoding = Encoding::Struct(
+            "CAFrameRateRange",
+            &[f32::ENCODING, f32::ENCODING, f32::ENCODING],
+        );
+    }
+    let (Some(links), Some(objects), Some(run_loops), Some(screens)) = (
+        class(c"CADisplayLink"),
+        class(c"NSObject"),
+        class(c"NSRunLoop"),
+        class(c"UIScreen"),
+    ) else {
+        return;
+    };
+    unsafe {
+        let screen: *mut AnyObject = msg_send![screens, mainScreen];
+        let fps: isize = if screen.is_null() {
+            60
+        } else {
+            msg_send![screen, maximumFramesPerSecond]
+        };
+        let maximum = fps.max(60) as f32;
+        let target: Option<Retained<AnyObject>> = msg_send![objects, new];
+        let Some(target) = target else {
+            return;
+        };
+        let link: *mut AnyObject = msg_send![
+            links,
+            displayLinkWithTarget: &*target,
+            selector: objc2::sel!(isEqual:)
+        ];
+        if link.is_null() {
+            return;
+        }
+        let range = FrameRateRange {
+            minimum: 60.0_f32.min(maximum),
+            maximum,
+            preferred: maximum,
+        };
+        let responds: Bool =
+            msg_send![link, respondsToSelector: objc2::sel!(setPreferredFrameRateRange:)];
+        if responds.as_bool() {
+            let _: () = msg_send![link, setPreferredFrameRateRange: range];
+        } else {
+            let _: () = msg_send![link, setPreferredFramesPerSecond: maximum as isize];
+        }
+        let main: *mut AnyObject = msg_send![run_loops, mainRunLoop];
+        let mode = NSString::from_str("kCFRunLoopCommonModes");
+        let _: () = msg_send![link, addToRunLoop: main, forMode: &*mode];
+        // The run loop retains the link, and the link its target, for the app's life.
+        std::mem::forget(target);
+        log::info!("iOS: display link up to {maximum} Hz");
+    }
+}

@@ -10,6 +10,7 @@ static CACHE: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new
 pub fn initialize(cache: std::path::PathBuf) {
     let _ = CACHE.set(cache);
     crate::objc::set_idle_timer_disabled(true);
+    crate::objc::enable_high_refresh();
 }
 
 pub fn vibrate(pulse: horizon_client::gamepad::Pulse) {

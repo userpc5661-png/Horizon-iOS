@@ -85,7 +85,14 @@ jobs:
 
       - name: Prepare engine data from official downloads
         if: steps.engine.outputs.cache-hit != 'true'
-        run: python3 tools/android_prepare.py --java-home "$JAVA_HOME"
+        run: |
+          # Mojang republished 26.3.json; horizon-prepare accepts the pinned original.
+          version=$(python3 -c "import json; print(json.load(open('research-lock.json'))['minecraft']['version'])")
+          sha=$(python3 -c "import json; print(json.load(open('research-lock.json'))['minecraft']['manifest_sha1'])")
+          mkdir -p ".local/minecraft/$version"
+          curl -fsSL "https://piston-meta.mojang.com/v1/packages/$sha/$version.json" -o ".local/minecraft/$version/manifest.json"
+          echo "$sha  .local/minecraft/$version/manifest.json" | shasum -a 1 -c -
+          python3 tools/android_prepare.py --java-home "$JAVA_HOME"
 
       - name: Package engine data
         run: |

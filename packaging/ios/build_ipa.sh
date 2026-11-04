@@ -23,7 +23,7 @@ stage="$(mktemp -d)"
 app="$stage/Payload/Horizon.app"
 mkdir -p "$app"
 cp "$binary" "$app/Horizon"
-strip -x "$app/Horizon" || true
+# Symbols stay in: iOS crash reports (.ips) then name the Rust function.
 sed -e "s/@VERSION@/$version/" -e "s/@BUILD@/$build/" packaging/ios/Info.plist > "$app/Info.plist"
 plutil -lint "$app/Info.plist"
 cp "$engine" "$app/engine-data.zip"

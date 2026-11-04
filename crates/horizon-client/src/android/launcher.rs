@@ -220,6 +220,10 @@ impl Launcher {
             renderer.resize(size.width, size.height);
             return Ok(());
         }
+        #[cfg(target_os = "ios")]
+        let window =
+            crate::ios_window(events, Window::default_attributes().with_title("Horizon"))?;
+        #[cfg(not(target_os = "ios"))]
         let window = Arc::new(
             events.create_window(Window::default_attributes().with_title("Horizon Android"))?,
         );

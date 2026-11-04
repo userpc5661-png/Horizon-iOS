@@ -51,7 +51,11 @@ declare_class!(
         #[method(drawRect:)]
         fn draw_rect(&self, rect: CGRect) {
             let mtm = MainThreadMarker::new().unwrap();
-            let window = self.window().unwrap();
+            // Horizon: a view whose window went away has nothing to redraw.
+            let Some(window) = self.window() else {
+                let _: () = unsafe { msg_send![super(self), drawRect: rect] };
+                return;
+            };
             app_state::handle_nonuser_event(
                 mtm,
                 EventWrapper::StaticEvent(Event::WindowEvent {
@@ -67,7 +71,9 @@ declare_class!(
             let mtm = MainThreadMarker::new().unwrap();
             let _: () = unsafe { msg_send![super(self), layoutSubviews] };
 
-            let window = self.window().unwrap();
+            let Some(window) = self.window() else {
+                return;
+            };
             let window_bounds = window.bounds();
             let screen = window.screen();
             let screen_space = screen.coordinateSpace();

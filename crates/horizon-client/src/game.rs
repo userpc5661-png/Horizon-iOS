@@ -15988,13 +15988,14 @@ impl ApplicationHandler for Game<'_> {
             attributes, "horizon", "horizon",
         );
         // `--offscreen` renders into a texture: its window would only show white.
-        let window = match event_loop.create_window(
+        let window = match new_window(
+            event_loop,
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
                 .with_visible(!self.options.offscreen),
         ) {
-            Ok(w) => Arc::new(w),
+            Ok(w) => w,
             Err(e) => {
                 self.error = Some(e.into());
                 crate::game::exit_app(event_loop);
@@ -20012,13 +20013,14 @@ impl Loading {
             attributes, "horizon", "horizon",
         );
         // `--offscreen` renders into a texture: its window would only show white.
-        let window = match event_loop.create_window(
+        let window = match new_window(
+            event_loop,
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
                 .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen)),
         ) {
-            Ok(w) => Arc::new(w),
+            Ok(w) => w,
             Err(e) => {
                 self.error = Some(e.into());
                 crate::game::exit_app(event_loop);
@@ -20556,6 +20558,18 @@ fn run_loading(
         }
     }
     Ok(())
+}
+
+/// The game's window. iOS keeps one UIWindow for the whole app, shared with
+/// the launcher; every other platform opens its own.
+fn new_window(
+    event_loop: &ActiveEventLoop,
+    attributes: winit::window::WindowAttributes,
+) -> std::result::Result<Arc<Window>, winit::error::OsError> {
+    #[cfg(target_os = "ios")]
+    return crate::ios_window(event_loop, attributes);
+    #[cfg(not(target_os = "ios"))]
+    event_loop.create_window(attributes).map(Arc::new)
 }
 
 fn new_event_loop() -> std::result::Result<EventLoop<()>, winit::error::EventLoopError> {

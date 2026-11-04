@@ -115,6 +115,28 @@ pub(crate) const PUBLIC_BUILD: bool = match option_env!("HORIZON_ANDROID_PUBLIC"
 
 use winit::event_loop::EventLoop;
 
+thread_local! {
+    static WINDOW: std::cell::RefCell<Option<std::sync::Arc<winit::window::Window>>> =
+        const { std::cell::RefCell::new(None) };
+}
+/// One UIWindow for the app's life. The launcher and the game each drop their
+/// handle when they hand over (Android's NativeActivity has a single window
+/// too); a second UIWindow left behind a detached view that crashed UIKit.
+pub(crate) fn ios_window(
+    events: &winit::event_loop::ActiveEventLoop,
+    attributes: winit::window::WindowAttributes,
+) -> Result<std::sync::Arc<winit::window::Window>, winit::error::OsError> {
+    WINDOW.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if let Some(window) = slot.as_ref() {
+            return Ok(window.clone());
+        }
+        let window = std::sync::Arc::new(events.create_window(attributes)?);
+        *slot = Some(window.clone());
+        Ok(window)
+    })
+}
+
 pub(crate) fn android_event_loop() -> Result<EventLoop<()>, winit::error::EventLoopError> {
     EventLoop::new()
 }

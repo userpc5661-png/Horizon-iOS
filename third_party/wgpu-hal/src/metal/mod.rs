@@ -812,6 +812,13 @@ impl crate::Queue for Queue {
 
             // https://developer.apple.com/documentation/quartzcore/cametallayer/1478157-presentswithtransaction?language=objc
             if !texture.present_with_transaction {
+                // Horizon: plain presentDrawable leaves ProMotion iPhones at
+                // 60 Hz even when every frame is fast. A minimum duration of
+                // one 120 Hz refresh lets Core Animation present up to 120.
+                #[cfg(target_os = "ios")]
+                command_buffer
+                    .presentDrawable_afterMinimumDuration(&texture.drawable, 1.0 / 120.0);
+                #[cfg(not(target_os = "ios"))]
                 command_buffer.presentDrawable(&texture.drawable);
             }
 

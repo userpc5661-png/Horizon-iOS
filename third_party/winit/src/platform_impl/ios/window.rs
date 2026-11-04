@@ -156,7 +156,7 @@ impl Inner {
     pub fn pre_present_notify(&self) {}
 
     pub fn inner_position(&self) -> Result<PhysicalPosition<i32>, NotSupportedError> {
-        let safe_area = self.safe_area_screen_space();
+        let safe_area = self.screen_frame();
         let position =
             LogicalPosition { x: safe_area.origin.x as f64, y: safe_area.origin.y as f64 };
         let scale_factor = self.scale_factor();
@@ -183,14 +183,11 @@ impl Inner {
         self.window.setBounds(bounds);
     }
 
+    /// Horizon: the whole screen, as `Resized` and touch positions report it.
+    /// The safe area here drew a smaller frame stretched over the full screen,
+    /// so every touch landed off its button; HUD margins keep clear of the notch.
     pub fn inner_size(&self) -> PhysicalSize<u32> {
-        let scale_factor = self.scale_factor();
-        let safe_area = self.safe_area_screen_space();
-        let size = LogicalSize {
-            width: safe_area.size.width as f64,
-            height: safe_area.size.height as f64,
-        };
-        size.to_physical(scale_factor)
+        self.outer_size()
     }
 
     pub fn outer_size(&self) -> PhysicalSize<u32> {

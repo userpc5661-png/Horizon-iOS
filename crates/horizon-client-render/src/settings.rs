@@ -222,7 +222,8 @@ impl Default for Settings {
             gamma: 0.5,
             // Vanilla's default, as for an options.txt without the key: a
             // capped frame rate leaves the cores idle when VSync is off.
-            max_fps: 120,
+            // iOS: Unlimited (260); the display's own rate (60 or 120 Hz) is the cap.
+            max_fps: if cfg!(target_os = "ios") { 260 } else { 120 },
             vsync: true,
             fullscreen: false,
             smooth_lighting: true,

@@ -508,17 +508,9 @@ impl Window {
 
         let screen_bounds = screen.bounds();
 
-        let frame = match window_attributes.inner_size {
-            Some(dim) => {
-                let scale_factor = screen.scale();
-                let size = dim.to_logical::<f64>(scale_factor as f64);
-                CGRect {
-                    origin: screen_bounds.origin,
-                    size: CGSize { width: size.width as _, height: size.height as _ },
-                }
-            },
-            None => screen_bounds,
-        };
+        // Horizon: iOS windows always fill the screen. The shared game asks for
+        // a desktop window size (854x480), which would shrink the view.
+        let frame = screen_bounds;
 
         let view = WinitView::new(mtm, &window_attributes, frame);
 
